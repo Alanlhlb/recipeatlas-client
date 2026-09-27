@@ -2,8 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api } from './api';
 import type { User } from './types';
 
+/** `localStorage` key under which the JWT issued at login is persisted. */
 const tokenKey = 'recipeatlas.token';
 
+/**
+ * Value published by {@link AuthContext} to the component tree.
+ *
+ * Carries the current session plus the operations that create or clear it.
+ */
 interface AuthContextValue {
   token: string | null;
   user: User | null;
@@ -13,8 +19,24 @@ interface AuthContextValue {
   logout: () => void;
 }
 
+/**
+ * Authentication context.
+ *
+ * Defaults to `undefined` so {@link useAuth} can detect a missing provider.
+ */
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+/**
+ * Supplies authentication state to the component tree.
+ *
+ * On mount it restores any JWT stored in `localStorage` and validates it with
+ * `api.currentUser`, discarding the session when the token is rejected. The
+ * resolved token, user and the login, register and logout actions are published
+ * through {@link AuthContext}.
+ *
+ * @param props - Component props.
+ * @param props.children - The application tree that may consume the session.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(tokenKey));
   const [user, setUser] = useState<User | null>(null);
@@ -55,6 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/**
+ * Reads the current authentication session from {@link AuthContext}.
+ *
+ * @returns The stored token, the resolved user, a `ready` flag indicating that
+ * the session has finished restoring, and the login, register and logout actions.
+ * @throws {Error} When called from a component that is not rendered inside an
+ * {@link AuthProvider}.
+ */
 export function useAuth(): AuthContextValue {
   const value = useContext(AuthContext);
 

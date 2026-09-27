@@ -2,24 +2,51 @@ import { FormEvent, useEffect, useMemo, useState, type ReactElement } from 'reac
 import { Link, NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api } from './api';
 import { useAuth } from './auth';
-import type { ContactMessage, ExternalRecipe, Recipe, RecipeInput } from './types';
+import type { ContactMessage, ExternalRecipe, Recipe, RecipeInput, RecipeQuery } from './types';
 
+/**
+ * Normalises a caught value into a message that is safe to display.
+ *
+ * @param error - Value thrown by an API call, usually an {@link ApiError}.
+ * @returns The API's message, or a generic fallback for unexpected errors.
+ */
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : 'Something went wrong. Please try again.';
 }
 
+/**
+ * Formats an ISO-8601 timestamp for display in the en-GB locale.
+ *
+ * @param value - ISO-8601 date-time string supplied by the API.
+ * @returns A medium date and short time string, for example `27 Sept 2026, 14:05`.
+ */
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
+/** Renders the shared `Loading…` placeholder shown while a request is in flight. */
 function Loading() {
   return <p className="status">Loading…</p>;
 }
 
+/**
+ * Renders an error or status message as an alert.
+ *
+ * @param props - Component props.
+ * @param props.message - Text announced to assistive technology and shown to the user.
+ */
 function Notice({ message }: { message: string }) {
   return <p className="notice" role="alert">{message}</p>;
 }
 
+/**
+ * Application shell that renders the site header, account controls and routed
+ * page content.
+ *
+ * Owns the top-level route table, so every page in the application is nested
+ * beneath it. Navigation is withheld until the stored session has finished
+ * restoring.
+ */
 function AppLayout() {
   const { user, logout, ready } = useAuth();
 
@@ -67,65 +94,184 @@ function AppLayout() {
   );
 }
 
+/**
+ * Route guard that renders its children only for a signed-in user.
+ *
+ * Redirects to `/login` when no user is authenticated.
+ *
+ * @param props - Component props.
+ * @param props.children - The route element to protect.
+ */
 function RequireUser({ children }: { children: ReactElement }) {
   const { user } = useAuth();
   return user ? children : <Navigate to="/login" replace />;
 }
 
+/**
+ * Route guard that renders its children only for an administrator.
+ *
+ * Redirects to the catalogue at `/` when the visitor is signed out or does not
+ * hold the `admin` role.
+ *
+ * @param props - Component props.
+ * @param props.children - The route element to protect.
+ */
 function RequireAdmin({ children }: { children: ReactElement }) {
   const { user } = useAuth();
   return user?.role === 'admin' ? children : <Navigate to="/" replace />;
 }
 
+/**
+ * Public recipe catalogue served at the `/` route.
+ *
+ * Loads recipes through `api.getRecipes` and lets a visitor search by title,
+ * filter by category, difficulty and maximum cooking time, and sort the results.
+ * Every change re-queries the API rather than filtering in the browser, and
+ * repeat requests reuse the representation the API says is still current.
+ */
 function RecipeCatalogue() {
   const [query, setQuery] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [category, setCategory] = useState('');
+  const [difficulty, setDifficulty] = useState('');
+  const [maxTime, setMaxTime] = useState('');
+  const [sort, setSort] = useState('updatedAt');
+  const [order, setOrder] = useState('desc');
+  const [categories, setCategories] = useState<string[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  async function loadRecipes(search = '') {
-    setLoading(true);
-    setError('');
-    try {
-      const result = await api.getRecipes(search);
-      setRecipes(result.data.recipes);
-    } catch (requestError) {
-      setError(errorMessage(requestError));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const activeQuery = useMemo<RecipeQuery>(() => ({
+    q: searchTerm || undefined,
+    category: category || undefined,
+    difficulty: difficulty || undefined,
+    maxTime: maxTime || undefined,
+    sort,
+    order,
+  }), [searchTerm, category, difficulty, maxTime, sort, order]);
 
-  useEffect(() => { void loadRecipes(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError('');
+      try {
+        const result = await api.getRecipes(activeQuery);
+        if (cancelled) return;
+        setRecipes(result.data.recipes);
+        setCount(result.data.count);
+        setCategories((current) => {
+          const merged = new Set(current);
+          result.data.recipes.forEach((recipe) => { if (recipe.category) merged.add(recipe.category); });
+          return [...merged].sort((left, right) => left.localeCompare(right));
+        });
+      } catch (requestError) {
+        if (!cancelled) setError(errorMessage(requestError));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void load();
+
+    return () => { cancelled = true; };
+  }, [activeQuery]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    void loadRecipes(query);
+    setSearchTerm(query.trim());
   }
+
+  function clearAll() {
+    setQuery('');
+    setSearchTerm('');
+    setCategory('');
+    setDifficulty('');
+    setMaxTime('');
+    setSort('updatedAt');
+    setOrder('desc');
+  }
+
+  const narrowed = Boolean(searchTerm || category || difficulty || maxTime);
 
   return (
     <section>
       <div className="hero">
         <p className="eyebrow">Recipe discovery platform</p>
         <h1>Find a recipe for today</h1>
-        <p>Browse the RecipeAtlas catalogue or search a recipe title.</p>
+        <p>Browse the RecipeAtlas catalogue, search a title, or narrow the list with filters.</p>
         <form className="search-form" onSubmit={submit}>
           <label className="sr-only" htmlFor="recipe-search">Search recipe titles</label>
           <input id="recipe-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Try pasta, soup or curry" />
           <button type="submit">Search</button>
-          {query && <button className="secondary" type="button" onClick={() => { setQuery(''); void loadRecipes(); }}>Clear</button>}
+          {(narrowed || query) && <button className="secondary" type="button" onClick={clearAll}>Clear all</button>}
         </form>
+        <div className="filter-bar">
+          <label>Category
+            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+              <option value="">All categories</option>
+              {categories.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+          <label>Difficulty
+            <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
+              <option value="">Any difficulty</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+          <label>Max time (minutes)
+            <input type="number" min="1" value={maxTime} onChange={(event) => setMaxTime(event.target.value)} placeholder="Any" />
+          </label>
+          <label>Sort by
+            <select value={sort} onChange={(event) => setSort(event.target.value)}>
+              <option value="updatedAt">Recently updated</option>
+              <option value="createdAt">Date added</option>
+              <option value="title">Title</option>
+              <option value="cookingTime">Cooking time</option>
+              <option value="servings">Servings</option>
+              <option value="difficulty">Difficulty</option>
+            </select>
+          </label>
+          <label>Order
+            <select value={order} onChange={(event) => setOrder(event.target.value)}>
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </select>
+          </label>
+        </div>
       </div>
       {error && <Notice message={error} />}
-      {loading ? <Loading /> : recipes.length ? <RecipeGrid recipes={recipes} /> : <EmptyState title="No recipes found" text="Try a different title, or ask an administrator to add a recipe." />}
+      {loading ? <Loading /> : recipes.length ? (
+        <>
+          <p className="result-count">{count} {count === 1 ? 'recipe' : 'recipes'} found</p>
+          <RecipeGrid recipes={recipes} />
+        </>
+      ) : <EmptyState title="No recipes found" text="Try a different title, clear the filters, or ask an administrator to add a recipe." />}
     </section>
   );
 }
 
+/**
+ * Renders a responsive grid of {@link RecipeCard} components.
+ *
+ * @param props - Component props.
+ * @param props.recipes - Recipes returned by the catalogue query.
+ */
 function RecipeGrid({ recipes }: { recipes: Recipe[] }) {
   return <div className="recipe-grid">{recipes.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} />)}</div>;
 }
 
+/**
+ * Renders a single recipe summary that links to its detail page.
+ *
+ * @param props - Component props.
+ * @param props.recipe - Recipe to summarise.
+ */
 function RecipeCard({ recipe }: { recipe: Recipe }) {
   return (
     <article className="recipe-card">
@@ -140,6 +286,13 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
   );
 }
 
+/**
+ * Recipe detail page served at the `/recipes/:id` route.
+ *
+ * Reads the recipe with `api.getRecipe`. Signed-in users may save it through
+ * `api.addFavorite` or send a question to the administrators with
+ * `api.createMessage`.
+ */
 function RecipeDetail() {
   const { id } = useParams();
   const { token, user } = useAuth();
@@ -218,6 +371,12 @@ function RecipeDetail() {
   );
 }
 
+/**
+ * Read-only TheMealDB search page served at the `/external` route.
+ *
+ * Calls `api.searchExternal` on submit and lists the returned recipes without
+ * offering any editing controls.
+ */
 function ExternalSearch() {
   const [query, setQuery] = useState('');
   const [recipes, setRecipes] = useState<ExternalRecipe[]>([]);
@@ -254,6 +413,16 @@ function ExternalSearch() {
   );
 }
 
+/**
+ * Combined login and registration form served at `/login` and `/register`.
+ *
+ * The `mode` prop selects which fields are collected. Submission delegates to
+ * `login` or `register` from {@link useAuth} and redirects to the catalogue once
+ * the session is established.
+ *
+ * @param props - Component props.
+ * @param props.mode - Whether to render the login or the registration form.
+ */
 function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const { login, register, user } = useAuth();
   const navigate = useNavigate();
@@ -296,6 +465,12 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   );
 }
 
+/**
+ * Personal favourites page served at `/favorites` behind {@link RequireUser}.
+ *
+ * Loads the signed-in user's collection with `api.getFavorites` and removes
+ * entries through `api.removeFavorite`.
+ */
 function FavoritesPage() {
   const { token } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -323,6 +498,12 @@ function FavoritesPage() {
   return <section><p className="eyebrow">Personal collection</p><h1>My favorites</h1>{error && <Notice message={error} />}{loading ? <Loading /> : recipes.length ? <div className="favorite-list">{recipes.map((recipe) => <div className="favorite-row" key={recipe.id}><Link to={`/recipes/${recipe.id}`}>{recipe.title}</Link><button className="danger small" onClick={() => void remove(recipe.id)}>Remove</button></div>)}</div> : <EmptyState title="No favorites yet" text="Open a recipe and use Save to favorites." />}</section>;
 }
 
+/**
+ * Administrator dashboard served at `/admin` behind {@link RequireAdmin}.
+ *
+ * Loads every recipe with `api.getRecipes` and the inbox with `api.getMessages`,
+ * and deletes a recipe through `api.deleteRecipe` after a confirmation prompt.
+ */
 function AdminPage() {
   const { token } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -354,6 +535,14 @@ function AdminPage() {
   return <section><div className="page-heading"><div><p className="eyebrow">Administrator area</p><h1>Manage RecipeAtlas</h1></div><Link className="button" to="/admin/recipes/new">Add recipe</Link></div>{error && <Notice message={error} />}{loading ? <Loading /> : <><h2>Recipes</h2><div className="admin-table">{recipes.map((recipe) => <div className="admin-row" key={recipe.id}><span><strong>{recipe.title}</strong><small>{recipe.category || 'Uncategorised'}</small></span><span className="row-actions"><Link className="button small secondary" to={`/admin/recipes/${recipe.id}/edit`}>Edit</Link><button className="danger small" onClick={() => void removeRecipe(recipe)}>Delete</button></span></div>)}</div><h2>User messages</h2>{messages.length ? <div className="message-list">{messages.map((message) => <article className="message-card" key={message.id}><div><strong>{message.subject}</strong><p className="muted">From {message.userName} ({message.userEmail}) about {message.recipeTitle} · {formatDate(message.createdAt)}</p></div><p>{message.body}</p></article>)}</div> : <EmptyState title="No messages" text="Messages from users will appear here." />}</>}</section>;
 }
 
+/**
+ * Create and edit form for recipes, served at `/admin/recipes/new` and
+ * `/admin/recipes/:id/edit` behind {@link RequireAdmin}.
+ *
+ * The presence of an `:id` route parameter switches the component into edit
+ * mode, loading the existing recipe with `api.getRecipe` and saving through
+ * `api.createRecipe` or `api.updateRecipe`.
+ */
 function RecipeEditor() {
   const { id } = useParams();
   const { token } = useAuth();
@@ -407,14 +596,28 @@ function RecipeEditor() {
   return <section className="editor panel"><Link className="back-link" to="/admin">← Back to administration</Link><h1>{editing ? 'Edit recipe' : 'Add recipe'}</h1><form onSubmit={submit}><label>Title<input value={title} required onChange={(event) => setTitle(event.target.value)} /></label><label>Instructions<textarea rows={7} value={instructions} required onChange={(event) => setInstructions(event.target.value)} /></label><div className="form-grid"><label>Category<input value={category} onChange={(event) => setCategory(event.target.value)} /></label><label>Image URL<input type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} /></label><label>Cooking time (minutes)<input type="number" min="1" value={cookingTime} onChange={(event) => setCookingTime(event.target.value)} /></label><label>Servings<input type="number" min="1" value={servings} onChange={(event) => setServings(event.target.value)} /></label><label>Difficulty<select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}><option value="">Not specified</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label></div><label>Ingredients<textarea rows={6} value={ingredients} placeholder={'One ingredient per line\nExample: Pasta|200 g'} onChange={(event) => setIngredients(event.target.value)} /></label><p className="muted">Use one ingredient per line. Add an optional quantity after a <code>|</code>.</p>{error && <Notice message={error} />}<button type="submit">{editing ? 'Update recipe' : 'Create recipe'}</button></form></section>;
 }
 
+/**
+ * Placeholder shown when a list or search returns no results.
+ *
+ * @param props - Component props.
+ * @param props.title - Short heading explaining the empty state.
+ * @param props.text - Supporting sentence suggesting what to do next.
+ */
 function EmptyState({ title, text }: { title: string; text: string }) {
   return <div className="empty-state"><h2>{title}</h2><p>{text}</p></div>;
 }
 
+/** Fallback page for unmatched routes, rendered by the `*` route. */
 function NotFound() {
   return <section className="empty-state"><h1>Page not found</h1><p>The page or recipe you requested does not exist.</p><Link className="button" to="/">Browse recipes</Link></section>;
 }
 
+/**
+ * Application root component.
+ *
+ * Renders {@link AppLayout}, which supplies the header, navigation and the
+ * route table.
+ */
 export default function App() {
   return <AppLayout />;
 }
