@@ -1,18 +1,16 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+import { AuthProvider } from './auth';
 import './styles.css';
-
-function App() {
-  return (
-    <main className="app-shell">
-      <h1>RecipeAtlas</h1>
-      <p>Recipe discovery client is ready.</p>
-    </main>
-  );
-}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </BrowserRouter>
   </StrictMode>,
 );

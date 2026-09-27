@@ -1,24 +1,94 @@
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #1f2937;
-  background: #f8fafc;
+  background: #f7f8fc;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
-* {
-  box-sizing: border-box;
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: #f7f8fc; }
+a { color: #2857b8; text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, textarea, select { font: inherit; }
+button, .button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #2857b8; border-radius: 8px; background: #2857b8; color: #fff; cursor: pointer; font-weight: 700; min-height: 40px; padding: .55rem .9rem; text-decoration: none; }
+button:hover, .button:hover { background: #1c469a; text-decoration: none; }
+button:disabled { cursor: wait; opacity: .65; }
+button.secondary, .button.secondary { border-color: #c8d0df; background: #fff; color: #263653; }
+button.danger { border-color: #b42318; background: #b42318; }
+.small { min-height: 34px; padding: .35rem .65rem; font-size: .88rem; }
+.text-button { border: 0; background: transparent; color: #2857b8; min-height: auto; padding: .25rem; }
+.text-button:hover { background: transparent; color: #1c469a; text-decoration: underline; }
+
+.app-shell { min-height: 100vh; }
+.site-header { align-items: center; background: #fff; border-bottom: 1px solid #e3e7ef; display: flex; gap: 1rem; justify-content: space-between; min-height: 66px; padding: .75rem max(1.25rem, calc((100vw - 1160px) / 2)); }
+.brand { color: #152447; font-size: 1.25rem; font-weight: 850; letter-spacing: -.02em; }
+.brand:hover { text-decoration: none; }
+nav { display: flex; flex-wrap: wrap; gap: .85rem; }
+nav a { color: #52627c; font-weight: 650; padding: .35rem 0; }
+nav a.active { color: #1f4ba8; border-bottom: 2px solid #2857b8; }
+.account-actions { align-items: center; display: flex; gap: .75rem; }
+.user-name { color: #52627c; font-size: .9rem; }
+.page-content { margin: 0 auto; max-width: 1160px; padding: 2rem 1.25rem 4rem; width: 100%; }
+
+h1 { color: #152447; font-size: clamp(1.85rem, 3vw, 2.7rem); letter-spacing: -.045em; margin: .2rem 0 .75rem; }
+h2 { color: #1d2e4d; margin-top: 1.65rem; }
+p { line-height: 1.55; }
+.eyebrow { color: #63728c; font-size: .76rem; font-weight: 800; letter-spacing: .08em; margin: 0 0 .35rem; text-transform: uppercase; }
+.muted { color: #63728c; }
+.hero { background: linear-gradient(120deg, #e8efff, #f7f9ff); border: 1px solid #dce6ff; border-radius: 16px; margin-bottom: 2rem; padding: clamp(1.5rem, 4vw, 3rem); }
+.search-form { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.2rem; }
+.search-form input { flex: 1 1 220px; }
+input, textarea, select { background: #fff; border: 1px solid #c8d0df; border-radius: 8px; color: #1f2937; padding: .65rem .75rem; width: 100%; }
+input:focus, textarea:focus, select:focus { border-color: #2857b8; box-shadow: 0 0 0 3px #dce6ff; outline: none; }
+label { color: #344561; display: grid; font-size: .92rem; font-weight: 700; gap: .38rem; margin-bottom: .9rem; }
+form button { margin-top: .25rem; }
+
+.recipe-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.recipe-card { background: #fff; border: 1px solid #e1e6f0; border-radius: 12px; overflow: hidden; }
+.recipe-card img, .recipe-image-placeholder { aspect-ratio: 16 / 9; background: #e7edfa; display: block; object-fit: cover; width: 100%; }
+.recipe-image-placeholder { align-items: center; color: #7182a2; display: grid; font-weight: 800; justify-content: center; }
+.card-body { padding: 1rem; }
+.card-body h2 { font-size: 1.18rem; margin: .25rem 0 .4rem; }
+.inline-link { display: inline-block; font-weight: 750; margin-top: .4rem; }
+
+.detail-layout { display: grid; gap: 2rem; grid-template-columns: minmax(0, 1fr) minmax(260px, 330px); }
+.detail-image { border-radius: 12px; display: block; margin: 1.25rem 0; max-height: 440px; object-fit: cover; width: 100%; }
+.ingredients { line-height: 1.75; padding-left: 1.2rem; }
+.instructions { white-space: pre-line; }
+.back-link { display: inline-block; font-weight: 700; margin-bottom: 1.2rem; }
+.panel { background: #fff; border: 1px solid #e1e6f0; border-radius: 12px; padding: 1.25rem; }
+.contact-panel { align-self: start; }
+.callout { background: #eef4ff; border-left: 4px solid #2857b8; border-radius: 6px; padding: .8rem 1rem; }
+.status, .empty-state { color: #63728c; padding: 2rem 0; text-align: center; }
+.empty-state { background: #fff; border: 1px dashed #bfc9d9; border-radius: 12px; margin-top: 1rem; padding: 2rem; }
+.notice { background: #fff0f0; border-left: 4px solid #b42318; color: #7a1c14; margin: 1rem 0; padding: .8rem 1rem; }
+.success { background: #ecfdf3; border-left: 4px solid #1a7f4b; color: #175d3a; margin: 1rem 0; padding: .8rem 1rem; }
+.auth-card { margin: 2rem auto; max-width: 460px; }
+.favorite-list, .admin-table, .message-list { display: grid; gap: .7rem; }
+.favorite-row, .admin-row { align-items: center; background: #fff; border: 1px solid #e1e6f0; border-radius: 10px; display: flex; justify-content: space-between; padding: .9rem 1rem; }
+.admin-row span:first-child { display: grid; gap: .15rem; }
+.admin-row small { color: #63728c; }
+.row-actions { display: flex; gap: .5rem; }
+.message-card { background: #fff; border: 1px solid #e1e6f0; border-radius: 10px; padding: 1rem; }
+.message-card strong { color: #203354; }
+.page-heading { align-items: center; display: flex; justify-content: space-between; gap: 1rem; }
+.editor { margin: 0 auto; max-width: 780px; }
+.form-grid { display: grid; gap: .75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sr-only { clip: rect(0, 0, 0, 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+
+@media (max-width: 800px) {
+  .site-header { align-items: flex-start; flex-wrap: wrap; }
+  .account-actions { margin-left: auto; }
+  .detail-layout { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
-}
-
-.app-shell {
-  display: grid;
-  min-height: 100vh;
-  place-content: center;
-  padding: 2rem;
-  text-align: center;
+@media (max-width: 520px) {
+  .site-header { padding: .75rem 1rem; }
+  nav { order: 3; width: 100%; }
+  .account-actions { font-size: .85rem; }
+  .user-name { display: none; }
+  .page-content { padding: 1.5rem 1rem 3rem; }
+  .favorite-row, .admin-row { align-items: flex-start; flex-direction: column; gap: .7rem; }
 }
