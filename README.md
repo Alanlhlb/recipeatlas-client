@@ -5,6 +5,8 @@ RecipeAtlas Client is the React TypeScript single-page application for the 6003C
 ## Features
 
 - Public local recipe browsing, title search, and recipe detail pages
+- Catalogue filtering by category, difficulty and maximum cooking time, with sorting in either direction
+- Conditional requests: the client replays the API's `ETag` as `If-None-Match` and serves `304 Not Modified` responses from memory
 - TheMealDB external recipe search
 - User registration, login, persistent JWT session, and logout
 - Personal recipe favourites: save, view, and remove
@@ -116,6 +118,35 @@ The frontend calls these main backend endpoint groups:
 ```
 
 JWTs are stored in browser local storage and sent as a Bearer token only for protected requests. The UI uses the current user endpoint to restore a session after refresh.
+
+### Catalogue query string
+
+`src/api.ts` builds the query string for `GET /api/recipes` from the controls in the catalogue. Blank controls are omitted so the backend applies its own defaults.
+
+```text
+q          partial, case-insensitive title search
+category   exact, case-insensitive category match
+difficulty easy | medium | hard
+maxTime    upper bound on cooking time, in minutes
+sort       title | category | cookingTime | servings | difficulty | createdAt | updatedAt
+order      asc | desc
+```
+
+### Conditional requests
+
+`src/api.ts` keeps the entity tag the API returns with every GET response and replays it as `If-None-Match` on the next identical call. When the API answers `304 Not Modified` the previously stored body is returned, so an unchanged catalogue costs no bandwidth. Any successful write clears the cache, because it may have invalidated a cached read. Entries are keyed by both URL and caller, so an administrator's response is never reused for an anonymous visitor.
+
+### Hypermedia links
+
+Recipe and catalogue responses include a `_links` object describing the actions available to the current caller. The backend omits links the caller is not entitled to use, so the set of relations differs between anonymous visitors, registered users and administrators. The shared types in `src/types.ts` describe this structure.
+
+## Code documentation
+
+Every component, hook, helper function and shared type carries JSDoc comments describing its purpose, parameters, return value and the API endpoints it touches. The comments follow the standard JSDoc tag convention (`@param`, `@returns`), so editors surface them on hover and a documentation generator such as TypeDoc can consume them directly:
+
+```bash
+npx typedoc --entryPointStrategy expand src
+```
 
 ## Coursework repository requirement
 
